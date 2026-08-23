@@ -837,3 +837,53 @@ class ContentIssueReport(BaseModel):
     def save(self, *args, **kwargs) -> None:
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+class EditorialRecommendation(BaseModel):
+    """Admin-curated collection of assets for a featured spotlight (e.g. Ramadan, Hajj).
+
+    Served by GET /recommendations/editorial/ (apps.content.services.recommendations)
+    while ``is_active`` and within [starts_at, ends_at] -- both bounds are optional, so
+    a collection can be always-on or scheduled ahead of time and left to auto-expire.
+    """
+
+    title = models.CharField(max_length=255, help_text="Collection title, e.g. 'Ramadan Recitations'")
+    description = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True, help_text="Whether this collection is eligible to be served")
+    starts_at = models.DateTimeField(null=True, blank=True, help_text="Optional start of the active window")
+    ends_at = models.DateTimeField(null=True, blank=True, help_text="Optional end of the active window")
+
+    assets = models.ManyToManyField(
+        Asset,
+        through="EditorialRecommendationAsset",
+        related_name="editorial_recommendations",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"EditorialRecommendation({self.title})"
+
+
+class EditorialRecommendationAsset(BaseModel):
+    """One asset's position within an EditorialRecommendation collection."""
+
+    recommendation = models.ForeignKey(
+        EditorialRecommendation,
+        on_delete=models.CASCADE,
+        related_name="recommendation_assets",
+    )
+    asset = models.ForeignKey(
+        Asset,
+        on_delete=models.CASCADE,
+        related_name="editorial_recommendation_assets",
+    )
+    position = models.PositiveIntegerField(default=1, help_text="Display order within the collection")
+
+    class Meta:
+        unique_together = [["recommendation", "asset"]]
+        ordering = ["position"]
+
+    def __str__(self) -> str:
+        return f"EditorialRecommendationAsset(recommendation={self.recommendation_id}, asset={self.asset_id})"

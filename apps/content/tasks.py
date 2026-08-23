@@ -256,6 +256,57 @@ def compute_similar_recommendations_task() -> dict:
 
 
 @shared_task(
+    soft_time_limit=120,
+    time_limit=180,
+)
+def compute_trending_recommendations_task() -> dict:
+    """
+    Recompute "trending" recommendation scores from recent usage events.
+
+    Delegates to RecommendationsService.compute_trending_recommendations, which
+    aggregates recent UsageEvent rows (weighted by event kind) into a global and a
+    per-category Redis leaderboard. See apps.content.services.recommendations for the
+    scoring design.
+
+    Runs every 15 minutes via Celery beat (config/celery.py) -- much more often than
+    similar/personalized, since "trending" is meant to track recent activity rather
+    than a nightly snapshot. The 2-minute soft limit reflects that this only scans a
+    trailing usage-event window, not the whole catalog.
+    """
+    logger.info("Task started [task=compute_trending_recommendations_task]")
+    from apps.content.services.recommendations import compute_trending_recommendations
+
+    result = compute_trending_recommendations()
+    logger.info(f"Task completed [task=compute_trending_recommendations_task, result={result}]")
+    return result
+
+
+@shared_task(
+    soft_time_limit=300,
+    time_limit=360,
+)
+def compute_personalized_recommendations_task() -> dict:
+    """
+    Nightly recompute of personalized recommendation scores for recently active users.
+
+    Delegates to RecommendationsService.compute_personalized_recommendations, which
+    builds each active user's facet profile from their recent usage history and scores
+    the catalog against it, writing the top matches per user to Redis. See
+    apps.content.services.recommendations for the scoring design.
+
+    Runs nightly at 2:15 (config/celery.py), just after compute_similar_recommendations
+    at 2:00 -- both draw on the same catalog snapshot without racing each other. Limits
+    mirror compute_similar_recommendations' convention (300s soft / 360s hard).
+    """
+    logger.info("Task started [task=compute_personalized_recommendations_task]")
+    from apps.content.services.recommendations import compute_personalized_recommendations
+
+    result = compute_personalized_recommendations()
+    logger.info(f"Task completed [task=compute_personalized_recommendations_task, result={result}]")
+    return result
+
+
+@shared_task(
     soft_time_limit=300,
     time_limit=360,
 )

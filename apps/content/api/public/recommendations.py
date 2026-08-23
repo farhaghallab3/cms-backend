@@ -5,8 +5,14 @@ from django.utils.translation import gettext_lazy as _
 from ninja import Schema
 
 from apps.content.models import Asset, StatusChoice
-from apps.content.services.recommendations import get_similar_asset_ids, hydrate_visible_assets_in_order
-from apps.core.ninja_utils.errors import NinjaErrorResponse
+from apps.content.services.recommendations import (
+    get_personalized_asset_ids,
+    get_similar_asset_ids,
+    get_trending_asset_ids,
+    hydrate_visible_assets_in_order,
+    list_active_editorial_recommendations,
+)
+from apps.core.ninja_utils.errors import ItqanError, NinjaErrorResponse
 from apps.core.ninja_utils.request import Request
 from apps.core.ninja_utils.router import ItqanRouter
 from apps.core.ninja_utils.tags import NinjaTag
@@ -84,3 +90,79 @@ def get_similar_recommendations(request: Request, asset_id: int):
 
     similar_ids = get_similar_asset_ids(asset_id)
     return hydrate_visible_assets_in_order(similar_ids)
+
+
+@router.get(
+    "recommendations/trending/",
+    response={200: list[RecommendedAssetOut]},
+)
+@track_usage(entity_type="recommendation_trending")
+def get_trending_recommendations(request: Request, category: str | None = None):
+    """
+    Currently popular content, ranked by recent usage weighted by event kind (a
+    download counts for more than a view). Precomputed periodically via Celery beat
+    (see apps.content.services.recommendations); an empty/not-yet-computed cache
+    simply yields an empty list, same as /similar/ treats "no matches".
+
+    `category` optionally scopes the leaderboard to one CategoryChoice value (e.g.
+    "recitation"); an unrecognised value behaves like "nothing trending yet" (empty
+    list) rather than a 400, since that's cheap to tell apart from a client bug by
+    just looking at the response.
+    """
+    trending_ids = get_trending_asset_ids(category=category)
+    return hydrate_visible_assets_in_order(trending_ids)
+
+
+@router.get(
+    "recommendations/personalized/",
+    response={
+        200: list[RecommendedAssetOut],
+        401: NinjaErrorResponse[Literal["authentication_required"]],
+    },
+)
+@track_usage(entity_type="recommendation_personalized")
+def get_personalized_recommendations(request: Request):
+    """
+    Suggestions based on the authenticated user's own download/view history (see
+    compute_personalized_recommendations). Falls back to global trending when the
+    user has no precomputed personalized data yet -- new account, no history since the
+    last nightly run, or a history too narrow to score any candidates all count as "no
+    personalized data", a valid non-error outcome, not "nothing to recommend at all".
+
+    Requires authentication (unlike similar/trending/editorial, which are pure
+    discovery metadata): personalized results are tied to a specific user's history.
+    """
+    user = getattr(request, "user", None)
+    if not (user and user.is_authenticated):
+        raise ItqanError(
+            "authentication_required",
+            _("You must be signed in to get personalized recommendations."),
+            status_code=401,
+        )
+
+    personalized_ids = get_personalized_asset_ids(user.id)
+    if not personalized_ids:
+        personalized_ids = get_trending_asset_ids()
+    return hydrate_visible_assets_in_order(personalized_ids)
+
+
+class EditorialRecommendationOut(Schema):
+    id: int
+    title: str
+    description: str
+    assets: list[RecommendedAssetOut]
+
+
+@router.get(
+    "recommendations/editorial/",
+    response={200: list[EditorialRecommendationOut]},
+)
+@track_usage(entity_type="recommendation_editorial")
+def get_editorial_recommendations(request: Request):
+    """
+    Admin-curated featured collections (e.g. seasonal spotlights) currently in their
+    active window, newest first. Unlike similar/trending/personalized this reads
+    straight from the DB -- editorial collections change rarely and the query is
+    already small and indexed, so there's no precompute/cache step.
+    """
+    return list_active_editorial_recommendations()

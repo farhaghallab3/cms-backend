@@ -49,6 +49,14 @@ app.conf.beat_schedule = {
         "task": "apps.content.tasks.compute_similar_recommendations_task",
         "schedule": crontab(minute=0, hour=2),
     },
+    "compute-trending-recommendations": {
+        "task": "apps.content.tasks.compute_trending_recommendations_task",
+        "schedule": timedelta(minutes=15),
+    },
+    "compute-personalized-recommendations": {
+        "task": "apps.content.tasks.compute_personalized_recommendations_task",
+        "schedule": crontab(minute=15, hour=2),
+    },
 }
 
 
