@@ -1,9 +1,9 @@
 from datetime import timedelta
 from unittest.mock import patch
 
-import redis as redis_lib
 from django.utils import timezone
 from model_bakery import baker
+import redis as redis_lib
 
 from apps.content.models import (
     Asset,
@@ -38,7 +38,12 @@ _GET_REDIS = "apps.content.services.recommendations.get_recommendations_redis"
 
 
 def _test_redis_client() -> redis_lib.Redis:
-    return redis_lib.Redis(host="localhost", port=6379, db=15, decode_responses=True)
+    from django_redis import get_redis_connection
+
+    kwargs = dict(get_redis_connection("default").connection_pool.connection_kwargs)
+    kwargs["db"] = 15
+    kwargs["decode_responses"] = True
+    return redis_lib.Redis(**kwargs)
 
 
 class RecommendationsServiceTest(BaseTestCase):
@@ -369,9 +374,7 @@ class EditorialRecommendationsServiceTest(BaseTestCase):
         self.assertEqual([], list_active_editorial_recommendations())
 
     def test_excludes_collection_outside_active_window(self):
-        future = EditorialRecommendation.objects.create(
-            title="Future", starts_at=timezone.now() + timedelta(days=7)
-        )
+        future = EditorialRecommendation.objects.create(title="Future", starts_at=timezone.now() + timedelta(days=7))
         EditorialRecommendationAsset.objects.create(recommendation=future, asset=self._make_asset())
         expired = EditorialRecommendation.objects.create(title="Expired", ends_at=timezone.now() - timedelta(days=1))
         EditorialRecommendationAsset.objects.create(recommendation=expired, asset=self._make_asset())
