@@ -104,6 +104,9 @@ msgstr "لم يتم العثور على الترجمة بالمعرّف {slug}."
 msgid "Provided asset_id {asset_id} does not match translation asset id {expected_id}."
 msgstr "المعرّف asset_id {asset_id} المُقدَّم لا يطابق معرّف أصل الترجمة {expected_id}."
 
+msgid "You must be signed in to get personalized recommendations."
+msgstr "يجب تسجيل الدخول للحصول على التوصيات الشخصية."
+
 msgid "Please select at least one file."
 msgstr "يرجى اختيار ملف واحد على الأقل."
 

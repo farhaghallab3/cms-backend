@@ -33,13 +33,7 @@ import logging
 from django.db.models import Count, Q
 from django.utils import timezone
 
-from apps.content.models import (
-    Asset,
-    CategoryChoice,
-    EditorialRecommendation,
-    StatusChoice,
-    UsageEvent,
-)
+from apps.content.models import Asset, CategoryChoice, EditorialRecommendation, StatusChoice, UsageEvent
 from apps.content.services.recommendations_redis import (
     get_recommendations_redis,
     personalized_key,
